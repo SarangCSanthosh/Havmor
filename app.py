@@ -155,7 +155,7 @@ def donut_kpi(channel_name, df_channel, color="#2ca02c"):
             },
             # ⭐ NEW — Out-of-range % written inside white region
             {
-                "text": f"{out_pct}% OOR",
+                "text": f"{out_pct}% Out of Range %",
                 "x": 0.5, "y": 0.32,
                 "showarrow": False,
                 "font": dict(size=12, color="red")
