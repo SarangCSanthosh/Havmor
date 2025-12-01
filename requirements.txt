@@ -1,4 +1,4 @@
 pandas
 plotly
 openpyxl
-plotly events
+plotly_events
