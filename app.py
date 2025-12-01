@@ -125,6 +125,8 @@ def donut_kpi(channel_name, df_channel, color="#2ca02c"):
     safe_str = f"{safe_count:,}"
     out_str = f"{out_count:,}"
 
+    out_pct = round((out_count / total) * 100, 1) if total else 0  # NEW %
+
     fig = go.Figure()
     fig.add_trace(go.Pie(
         labels=["Safe", "Out-of-Range"],
@@ -144,14 +146,24 @@ def donut_kpi(channel_name, df_channel, color="#2ca02c"):
     fig.update_layout(
         margin=dict(l=5, r=5, t=5, b=5),
         showlegend=False,
-        annotations=[{
-            "text": f"<b>{percent}%</b><br>{channel_name}",
-            "x": 0.5, "y": 0.5,
-            "showarrow": False,
-            "font": dict(size=15)
-        }]
+        annotations=[
+            {
+                "text": f"<b>{percent}%</b><br>{channel_name}",
+                "x": 0.5, "y": 0.55,
+                "showarrow": False,
+                "font": dict(size=14)
+            },
+            # ⭐ NEW — Out-of-range % written inside white region
+            {
+                "text": f"{out_pct}% OOR",
+                "x": 0.5, "y": 0.32,
+                "showarrow": False,
+                "font": dict(size=12, color="red")
+            }
+        ]
     )
     return fig
+
 
 
 # ---------------------------------------------
@@ -332,7 +344,7 @@ else:
 # -------------------------------
 if latest_month and selected_channel:
 
-    st.markdown("### 🔍 Drilldown: Hour-wise Readings")
+    st.markdown("### Drilldown: Hour-wise Readings (Latest Month)")
 
     dfc = channels[selected_channel]
     dfm = dfc[dfc["MonthPeriod"] == latest_month].copy()
