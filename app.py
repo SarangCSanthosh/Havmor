@@ -6,6 +6,7 @@ Temperature Monitoring Dashboard
 """
 
 import streamlit as st
+import math
 import pandas as pd
 from datetime import datetime, date, timedelta, time
 import plotly.graph_objects as go
@@ -114,7 +115,7 @@ if not channel_names:
 # ---------------------------------------------
 # DONUT KPI
 # ---------------------------------------------
-import math
+
 
 def donut_kpi(channel_name, df_channel, color="#2ca02c"):
     total = len(df_channel)
