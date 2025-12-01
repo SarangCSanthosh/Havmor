@@ -117,46 +117,41 @@ if not channel_names:
 def donut_kpi(channel_name, df_channel, color="#2ca02c"):
     total = len(df_channel)
     safe_count = df_channel["Temperature"].between(DESIRED_MIN, DESIRED_MAX).sum()
-    out_count  = total - safe_count
-
-    safe_pct = round((safe_count / total) * 100, 1) if total else 0
-    out_pct  = round((out_count / total) * 100, 1) if total else 0
+    out_count = total - safe_count
 
     safe_plot = safe_count if safe_count > 0 else 0.0001
-    out_plot  = out_count if out_count > 0 else 0.0001
+    out_plot = out_count if out_count > 0 else 0.0001
 
-    fig = go.Figure(go.Pie(
+    safe_str = f"{safe_count:,}"
+    out_str = f"{out_count:,}"
+
+    fig = go.Figure()
+    fig.add_trace(go.Pie(
+        labels=["Safe", "Out-of-Range"],
         values=[safe_plot, out_plot],
         hole=0.65,
-        marker=dict(colors=[color, "#ffffff"]),   # white = out-of-range zone
+        marker=dict(colors=[color, "#eaeaea"]),
+        sort=False,
         textinfo="none",
-        sort=False
+        hovertemplate=
+            "Safe Range Readings: " + safe_str +
+            "<br>Out-of-Range Readings: " + out_str +
+            "<extra></extra>"
     ))
+
+    percent = round((safe_count / total) * 100, 1) if total else 0
 
     fig.update_layout(
         margin=dict(l=5, r=5, t=5, b=5),
         showlegend=False,
-        annotations=[
-            # MAIN SAFE %
-            dict(
-                text=f"<b>{safe_pct}% Safe</b>",
-                x=0.5, y=0.62, showarrow=False, font=dict(size=15)
-            ),
-            # OUT OF RANGE %
-            dict(
-                text=f"{out_pct}% OOR",
-                x=0.5, y=0.40, showarrow=False, font=dict(size=12, color="red")
-            ),
-            # CHANNEL NAME
-            dict(
-                text=f"{channel_name}",
-                x=0.5, y=0.18, showarrow=False, font=dict(size=11)
-            ),
-        ]
+        annotations=[{
+            "text": f"<b>{percent}%</b><br>{channel_name}",
+            "x": 0.5, "y": 0.5,
+            "showarrow": False,
+            "font": dict(size=15)
+        }]
     )
-
     return fig
-
 
 
 # ---------------------------------------------
