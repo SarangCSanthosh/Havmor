@@ -9,8 +9,6 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, date, timedelta, time
 import plotly.graph_objects as go
-from streamlit_plotly_events import plotly_events
-
 
 # -------------------------------
 # CONFIG
@@ -117,41 +115,48 @@ if not channel_names:
 # DONUT KPI
 # ---------------------------------------------
 def donut_kpi(channel_name, df_channel, color="#2ca02c"):
-
     total = len(df_channel)
-    safe_count = df_channel["Temperature"].between(DESIRED_MIN, DESIRED_MAX, inclusive="both").sum()
-    out_count = total - safe_count
+    safe_count = df_channel["Temperature"].between(DESIRED_MIN, DESIRED_MAX).sum()
+    out_count  = total - safe_count
 
-    percent = round((safe_count / total) * 100, 1) if total else 0
+    safe_pct = round((safe_count / total) * 100, 1) if total else 0
+    out_pct  = round((out_count / total) * 100, 1) if total else 0
 
-    safe_str = f"{safe_count:,}"
-    out_str = f"{out_count:,}"
+    safe_plot = safe_count if safe_count > 0 else 0.0001
+    out_plot  = out_count if out_count > 0 else 0.0001
 
     fig = go.Figure(go.Pie(
-        labels=["Safe", "Out-of-Range"],
-        values=[percent, 100 - percent],          # FIXED → uses percentages
+        values=[safe_plot, out_plot],
         hole=0.65,
-        marker=dict(colors=[color, "#ffffff"]),    # white remaining portion
+        marker=dict(colors=[color, "#ffffff"]),   # white = out-of-range zone
         textinfo="none",
-        hovertemplate=
-            "Safe Range Readings: " + safe_str +
-            "<br>Out-of-Range Readings: " + out_str +
-            "<br>Safe %: " + str(percent) + "%" +
-            "<extra></extra>"
+        sort=False
     ))
 
     fig.update_layout(
         margin=dict(l=5, r=5, t=5, b=5),
         showlegend=False,
-        annotations=[{
-            "text": f"<b>{percent}%</b><br>{channel_name}",
-            "x": 0.5, "y": 0.5,
-            "showarrow": False,
-            "font": dict(size=15)
-        }]
+        annotations=[
+            # MAIN SAFE %
+            dict(
+                text=f"<b>{safe_pct}% Safe</b>",
+                x=0.5, y=0.62, showarrow=False, font=dict(size=15)
+            ),
+            # OUT OF RANGE %
+            dict(
+                text=f"{out_pct}% OOR",
+                x=0.5, y=0.40, showarrow=False, font=dict(size=12, color="red")
+            ),
+            # CHANNEL NAME
+            dict(
+                text=f"{channel_name}",
+                x=0.5, y=0.18, showarrow=False, font=dict(size=11)
+            ),
+        ]
     )
 
     return fig
+
 
 
 # ---------------------------------------------
@@ -283,13 +288,9 @@ for ch in channel_names:
 # -----------------------------------------------
 # PEAK OUT-OF-RANGE HOURS (LATEST MONTH)
 # -----------------------------------------------
-# -------------------------------
-# PEAK OUT-OF-RANGE HOURS (LATEST MONTH)
-# -------------------------------
 st.markdown("---")
 st.subheader("Peak Out-of-Range Hours — Latest Month")
 
-# Determine latest month
 latest_month = None
 for ch, dfc in channels.items():
     if not dfc.empty:
@@ -299,78 +300,77 @@ for ch, dfc in channels.items():
 
 if latest_month is None:
     st.info("No monthly data available.")
-    st.stop()
-
-st.write(f"Latest Month: **{latest_month}**")
-
-selected_channel = st.radio(
-    "Select Channel", 
-    options=list(channels.keys()), 
-    horizontal=True
-)
-
-dfc = channels[selected_channel]
-dfm = dfc[dfc["MonthPeriod"] == latest_month].copy()
-dfm["HourDisplay"] = dfm["Timestamp"].dt.hour.replace(0, 24)
-
-unique_hours = sorted(dfm["HourDisplay"].unique())
-
-df_out = dfm[~dfm["Temperature"].between(DESIRED_MIN, DESIRED_MAX, inclusive="both")]
-
-if df_out.empty:
-    df_hour = pd.DataFrame({"HourDisplay": unique_hours, "Count": [0] * len(unique_hours)})
 else:
-    df_out["HourDisplay"] = df_out["HourDisplay"].astype(int)
-    df_hour = df_out.groupby("HourDisplay").size().reindex(unique_hours, fill_value=0).reset_index(name="Count")
+    st.write(f"Latest Month: **{latest_month}**")
 
-# MAIN SUMMARY CHART
-fig_peak = go.Figure()
-fig_peak.add_trace(go.Bar(x=df_hour["HourDisplay"], y=df_hour["Count"], marker_color="crimson"))
-fig_peak.update_layout(
-    title=f"Out-of-Range Frequency — {selected_channel}",
-    xaxis_title="Hour (1–24)",
-    yaxis_title="Count",
-    height=350,
-)
+    selected_channel = st.radio("Select Channel", options=list(channels.keys()), horizontal=True)
 
-clicked = plotly_events(fig_peak, click_event=True)
+    dfc = channels[selected_channel]
+    dfm = dfc[dfc["MonthPeriod"] == latest_month].copy()
 
-st.plotly_chart(fig_peak, use_container_width=True)
+    if not dfm.empty:
+        dfm["HourDisplay"] = dfm["Timestamp"].dt.hour.replace(0, 24)
+        unique_hours = sorted(dfm["HourDisplay"].unique())
+
+        df_out = dfm[~dfm["Temperature"].between(DESIRED_MIN, DESIRED_MAX)].copy()
+
+        if df_out.empty:
+            df_hour = pd.DataFrame({"HourDisplay": unique_hours, "Count": [0] * len(unique_hours)})
+        else:
+            df_out["HourDisplay"] = df_out["HourDisplay"].astype(int)
+            df_hour = df_out.groupby("HourDisplay").size().reindex(unique_hours, fill_value=0).reset_index(name="Count")
+
+        fig_peak = go.Figure()
+        fig_peak.add_trace(go.Bar(x=df_hour["HourDisplay"], y=df_hour["Count"], marker_color="crimson"))
+
+        fig_peak.update_layout(
+            title=f"Out-of-Range Frequency — {selected_channel}",
+            xaxis_title="Hour (1–24)",
+            yaxis_title="Out-of-Range Count",
+            height=400
+        )
+
+        st.plotly_chart(fig_peak, use_container_width=True)
 
 # -------------------------------
-# DRILL-DOWN CHART
+# HOURLY DRILLDOWN (Based on selected hour)
 # -------------------------------
-st.markdown("### Drill-down: Hour Readings")
+if latest_month and selected_channel:
 
-# Default selected hour
-if clicked:
-    selected_hour = int(clicked[0]["x"])
-else:
-    selected_hour = st.selectbox("Select Hour", unique_hours)
+    st.markdown("### 🔍 Drilldown: Hour-wise Readings")
 
-df_drill = dfm[dfm["HourDisplay"] == selected_hour][["Timestamp", "Temperature"]]
+    dfc = channels[selected_channel]
+    dfm = dfc[dfc["MonthPeriod"] == latest_month].copy()
 
-st.write(f"Showing readings for Hour **{selected_hour}**")
+    if not dfm.empty:
 
-fig_drill = go.Figure()
-fig_drill.add_trace(go.Bar(
-    x=df_drill["Timestamp"].dt.strftime("%Y-%m-%d %H:%M"),
-    y=df_drill["Temperature"],
-    marker_color="royalblue"
-))
+        dfm["HourDisplay"] = dfm["Timestamp"].dt.hour.replace(0, 24)
+        unique_hours = sorted(dfm["HourDisplay"].unique())
 
-add_safe_lines(fig_drill)
+        selected_hour = st.selectbox("Pick Hour to Drill Down", unique_hours)
 
-fig_drill.update_layout(
-    title=f"Hourly Temperature Readings – {selected_channel} (Hour {selected_hour})",
-    xaxis_title="Timestamp",
-    yaxis_title="Temperature",
-    height=350,
-    xaxis_tickangle=-45
-)
+        df_hr = dfm[dfm["HourDisplay"] == selected_hour].copy()
 
-st.plotly_chart(fig_drill, use_container_width=True)
+        # Color red if OOR else blue
+        df_hr["Color"] = df_hr["Temperature"].apply(
+            lambda x: "crimson" if not (DESIRED_MIN <= x <= DESIRED_MAX) else "royalblue"
+        )
 
+        fig_drill = go.Figure()
+        fig_drill.add_trace(go.Bar(
+            x=df_hr["Timestamp"].dt.strftime("%Y-%m-%d %H:%M"),
+            y=df_hr["Temperature"],
+            marker_color=df_hr["Color"]
+        ))
+
+        fig_drill.update_layout(
+            title=f"Readings for Hour {selected_hour} — {selected_channel}",
+            xaxis_title="Timestamp",
+            yaxis_title="Temperature",
+            height=450
+        )
+
+        st.plotly_chart(fig_drill, use_container_width=True)
 
 # -----------------------------------------------
 # ALERTS (LATEST AVAILABLE DATE)
