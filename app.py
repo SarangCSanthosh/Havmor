@@ -312,7 +312,7 @@ for ch, dfc in channels.items():
 if latest_month is None:
     st.info("No monthly data available.")
 else:
-    st.write(f"📅 Latest Month: **{latest_month}**")
+    st.write(f"Latest Month: **{latest_month}**")
 
     # RADIO BUTTON
     selected_channel = st.radio(
@@ -368,7 +368,7 @@ else:
 
         fig_peak.update_layout(
             title=f"Out-of-Range Frequency by Hour — {selected_channel} ({latest_month})",
-            xaxis_title="Hour (Only hours present in data)",
+            xaxis_title="Hour",
             yaxis_title="Out-of-Range Count",
             height=450,
             xaxis=dict(
