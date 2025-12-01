@@ -246,13 +246,57 @@ def small_weekly(df_channel):
 # ---------------------------------------------
 # MONTHLY PANEL
 # ---------------------------------------------
+# ---------------------------------------------
+# MONTHLY PANEL (Lollipop Chart)
+# ---------------------------------------------
 def small_monthly(df_channel):
+    # Group into monthly averages
     df_m = df_channel.groupby(df_channel["MonthPeriod"].astype(str))["Temperature"].mean().reset_index()
+    df_m.rename(columns={"MonthPeriod": "Month"}, inplace=True)
 
-    fig = go.Figure(go.Bar(x=df_m["MonthPeriod"], y=df_m["Temperature"]))
+    # Sort months chronologically
+    df_m["Month"] = pd.to_datetime(df_m["Month"])
+    df_m = df_m.sort_values("Month")
+    df_m["MonthLabel"] = df_m["Month"].dt.strftime("%b %Y")
+
+    # Lollipop chart
+    fig = go.Figure()
+
+    # Stem (the vertical line)
+    fig.add_trace(go.Scatter(
+        x=df_m["MonthLabel"],
+        y=df_m["Temperature"],
+        mode="lines",
+        line=dict(color="lightgray", width=3),
+        hoverinfo="skip",
+        showlegend=False
+    ))
+
+    # Circle (the lollipop head)
+    fig.add_trace(go.Scatter(
+        x=df_m["MonthLabel"],
+        y=df_m["Temperature"],
+        mode="markers",
+        marker=dict(size=14, color="royalblue"),
+        name="Avg Temp",
+        hovertemplate="Month: %{x}<br>Avg Temp: %{y}°C<extra></extra>"
+    ))
+
+    # Safe-range horizontal lines
     add_safe_lines(fig)
-    fig.update_layout(title="Monthly Avg Temp", height=260)
+
+    # Layout improvements
+    fig.update_layout(
+        title="Monthly Avg Temp (Lollipop Chart)",
+        height=300,
+        xaxis_title="Month",
+        yaxis_title="Avg Temperature (°C)",
+        xaxis=dict(tickangle=-45),
+        margin=dict(l=40, r=20, t=60, b=40)
+    )
+
     return fig
+
 
 
 # -----------------------------------------------
