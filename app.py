@@ -114,20 +114,35 @@ if not channel_names:
 # ---------------------------------------------
 # DONUT KPI
 # ---------------------------------------------
+import math
+
 def donut_kpi(channel_name, df_channel, color="#2ca02c"):
     total = len(df_channel)
     safe_count = df_channel["Temperature"].between(DESIRED_MIN, DESIRED_MAX).sum()
     out_count = total - safe_count
 
     safe_plot = safe_count if safe_count > 0 else 0.0001
-    out_plot = out_count if out_count > 0 else 0.0001
+    out_plot  = out_count if out_count > 0 else 0.0001
+
+    safe_pct = safe_count / total if total else 0
+    out_pct  = out_count / total if total else 0
 
     safe_str = f"{safe_count:,}"
-    out_str = f"{out_count:,}"
+    out_str  = f"{out_count:,}"
+    out_pct_label = round(out_pct * 100, 1)
 
-    out_pct = round((out_count / total) * 100, 1) if total else 0  # NEW %
+    # -------------------------------
+    # Calculate white slice label position
+    # -------------------------------
+    mid_angle_deg = (safe_pct + out_pct/2) * 360
+    mid_angle_rad = math.radians(mid_angle_deg)
+
+    radius = 0.8     # position inside donut ring
+    x = 0.5 + radius * math.cos(mid_angle_rad)
+    y = 0.5 + radius * math.sin(mid_angle_rad)
 
     fig = go.Figure()
+
     fig.add_trace(go.Pie(
         labels=["Safe", "Out-of-Range"],
         values=[safe_plot, out_plot],
@@ -141,28 +156,31 @@ def donut_kpi(channel_name, df_channel, color="#2ca02c"):
             "<extra></extra>"
     ))
 
-    percent = round((safe_count / total) * 100, 1) if total else 0
+    percent = round(safe_pct * 100, 1)
 
     fig.update_layout(
         margin=dict(l=5, r=5, t=5, b=5),
         showlegend=False,
         annotations=[
+            # Main center label
             {
                 "text": f"<b>{percent}%</b><br>{channel_name}",
-                "x": 0.5, "y": 0.55,
+                "x": 0.5, "y": 0.53,
                 "showarrow": False,
-                "font": dict(size=14)
+                "font": dict(size=15)
             },
-            # ⭐ NEW — Out-of-range % written inside white region
+            # ⭐ NEW: Out-of-range % inside white slice
             {
-                "text": f"{out_pct}% OOR",
-                "x": 0.5, "y": 0.32,
+                "text": f"{out_pct_label}%",
+                "x": x, "y": y,
                 "showarrow": False,
-                "font": dict(size=12, color="red")
+                "font": dict(size=14, color="red")
             }
         ]
     )
+
     return fig
+
 
 
 
