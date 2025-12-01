@@ -295,9 +295,13 @@ for ch in channel_names:
 # -----------------------------------------------
 # PEAK OUT-OF-RANGE HOURS (LATEST MONTH)
 # -----------------------------------------------
+# -------------------------------
+# PEAK OUT-OF-RANGE HOURS (LATEST MONTH)
+# -------------------------------
 st.markdown("---")
 st.subheader("Peak Out-of-Range Hours — Latest Month")
 
+# Determine latest month in selected year
 latest_month = None
 for ch, dfc in channels.items():
     if not dfc.empty:
@@ -308,36 +312,74 @@ for ch, dfc in channels.items():
 if latest_month is None:
     st.info("No monthly data available.")
 else:
-    st.write(f"Latest Month: **{latest_month}**")
+    st.write(f"📅 Latest Month: **{latest_month}**")
 
-    selected_channel = st.radio("Select Channel", options=list(channels.keys()), horizontal=True)
+    # RADIO BUTTON
+    selected_channel = st.radio(
+        "Select Channel",
+        options=list(channels.keys()),
+        horizontal=True
+    )
 
     dfc = channels[selected_channel]
     dfm = dfc[dfc["MonthPeriod"] == latest_month].copy()
 
-    if not dfm.empty:
+    if dfm.empty:
+        st.info(f"No data for {selected_channel} in the latest month.")
+    else:
+        # ALL HOURS present in the data (Option B logic)
         dfm["HourDisplay"] = dfm["Timestamp"].dt.hour.replace(0, 24)
-        unique_hours = sorted(dfm["HourDisplay"].unique())
 
+        unique_hours = sorted(dfm["HourDisplay"].unique())   # hours that exist in data
+
+        # OUT-OF-RANGE subset
         df_out = dfm[~dfm["Temperature"].between(DESIRED_MIN, DESIRED_MAX)].copy()
 
+        # Case 1: No out-of-range → still show hours but count=0
         if df_out.empty:
-            df_hour = pd.DataFrame({"HourDisplay": unique_hours, "Count": [0] * len(unique_hours)})
+            st.info(f"No out-of-range values for {selected_channel} in {latest_month}.")
+
+            df_hour = pd.DataFrame({
+                "HourDisplay": unique_hours,
+                "Count": [0] * len(unique_hours)
+            })
+
+        # Case 2: Out-of-range exists → count them normally
         else:
             df_out["HourDisplay"] = df_out["HourDisplay"].astype(int)
-            df_hour = df_out.groupby("HourDisplay").size().reindex(unique_hours, fill_value=0).reset_index(name="Count")
+            df_hour = df_out.groupby("HourDisplay").size().reset_index(name="Count")
 
+            # Ensure chart shows hours with 0 bars also
+            df_hour = df_hour.set_index("HourDisplay").reindex(unique_hours, fill_value=0).reset_index()
+
+        hours = df_hour["HourDisplay"].tolist()
+        counts = df_hour["Count"].tolist()
+
+        # Chart
         fig_peak = go.Figure()
-        fig_peak.add_trace(go.Bar(x=df_hour["HourDisplay"], y=df_hour["Count"], marker_color="crimson"))
+        fig_peak.add_trace(
+            go.Bar(
+                x=hours,
+                y=counts,
+                marker_color="crimson",
+                name=selected_channel
+            )
+        )
 
         fig_peak.update_layout(
-            title=f"Out-of-Range Frequency — {selected_channel}",
-            xaxis_title="Hour (1–24)",
+            title=f"Out-of-Range Frequency by Hour — {selected_channel} ({latest_month})",
+            xaxis_title="Hour (Only hours present in data)",
             yaxis_title="Out-of-Range Count",
-            height=400
+            height=450,
+            xaxis=dict(
+                tickmode="array",
+                tickvals=hours,
+                ticktext=[str(h) for h in hours]
+            )
         )
 
         st.plotly_chart(fig_peak, use_container_width=True)
+
 
 # -------------------------------
 # HOURLY DRILLDOWN (Based on selected hour)
