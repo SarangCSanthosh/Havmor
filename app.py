@@ -3,6 +3,7 @@
 Temperature Monitoring Dashboard
 (Fixed: TODAY panel now uses original Excel date — BaseDate)
 (Updated: Reads live data directly from Google Sheets)
+(Added: Cooling Efficiency Curve (CEC) — placed after Drilldown as requested)
 """
 
 import streamlit as st
@@ -464,6 +465,94 @@ if latest_month and selected_channel:
         )
 
         st.plotly_chart(fig_drill, use_container_width=True)
+
+
+# -----------------------------------------------
+# COOLING EFFICIENCY CURVE (CEC) - ADDED (Option A)
+# (Placed immediately after Drilldown, before Alerts)
+# -----------------------------------------------
+st.markdown("---")
+st.subheader("Cooling Efficiency Curve (CEC) — Warm Recovery Analysis")
+
+# Use selected_channel and latest_month (they were defined above in Peak section)
+# Defensive checks
+if 'selected_channel' in locals() and latest_month is not None:
+    dfc = channels[selected_channel]
+    dfm = dfc[dfc["MonthPeriod"] == latest_month].copy()
+
+    if dfm.empty:
+        st.info("No data available for CEC.")
+    else:
+        # Warm spikes > DESIRED_MAX (-10°C)
+        df_warm = dfm[dfm["Temperature"] > DESIRED_MAX].copy()
+
+        if df_warm.empty:
+            st.success("No warm spikes detected this month — system cooling well!")
+        else:
+            recovery_records = []
+
+            # We'll index by timestamp -> to make future lookups faster convert dfm to dict keyed by timestamp
+            dfm_by_ts = {ts: temp for ts, temp in zip(dfm["Timestamp"], dfm["Temperature"])}
+
+            for idx, row in df_warm.iterrows():
+                t0 = row["Timestamp"]
+                temp0 = row["Temperature"]
+
+                # Look 1–3 hours ahead
+                for step in [1, 2, 3]:
+                    future_time = t0 + timedelta(hours=step)
+                    # exact match on timestamp is expected because timestamps are created hour-aligned
+                    temp_future = dfm_by_ts.get(future_time, None)
+
+                    if temp_future is not None:
+                        recovery = temp0 - temp_future  # positive = cooling
+                        recovery_records.append({
+                            "Channel": selected_channel,
+                            "WarmTimestamp": t0,
+                            "Step": step,
+                            "Recovery": recovery,
+                            "T0": temp0,
+                            "T_future": temp_future
+                        })
+
+            if not recovery_records:
+                st.info("Insufficient data to compute recovery curves (missing future readings).")
+            else:
+                df_recovery = pd.DataFrame(recovery_records)
+
+                # Pivot for chart: index=WarmTimestamp, columns=Step
+                pivot = df_recovery.pivot(index="WarmTimestamp", columns="Step", values="Recovery")
+                pivot = pivot.sort_index()
+
+                fig_cec = go.Figure()
+
+                # Add lines for 1h, 2h, 3h recovery where available
+                colors = {1: "#1f77b4", 2: "#ff7f0e", 3: "#2ca02c"}
+                for step in [1, 2, 3]:
+                    if step in pivot.columns:
+                        fig_cec.add_trace(go.Scatter(
+                            x=pivot.index,
+                            y=pivot[step],
+                            mode="lines+markers",
+                            name=f"{step}-Hour Recovery",
+                            line=dict(color=colors.get(step, None)),
+                            marker=dict(size=8)
+                        ))
+
+                # Add a horizontal zero line for reference
+                fig_cec.add_hline(y=0, line_dash="dash", line_color="gray", line_width=1)
+
+                fig_cec.update_layout(
+                    title=f"Cooling Efficiency Curve (CEC) — {selected_channel} ({latest_month})",
+                    xaxis_title="Warm Spike Time",
+                    yaxis_title="Cooling Achieved (°C) (higher = better)",
+                    height=450,
+                    xaxis=dict(tickangle=-45)
+                )
+
+                st.plotly_chart(fig_cec, use_container_width=True)
+else:
+    st.info("CEC unavailable: please ensure Peak Out-of-Range section has a selected channel and data.")
 
 # -----------------------------------------------
 # ALERTS (LATEST AVAILABLE DATE)
