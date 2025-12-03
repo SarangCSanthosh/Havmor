@@ -1,9 +1,9 @@
-
 # app.py
 """
 Temperature Monitoring Dashboard
-(Fixed: TODAY panel now uses original Excel date — BaseDate)
+(Fixed: TODAY panel uses original Excel date — BaseDate)
 (Updated: Reads live data directly from Google Sheets)
+(Hour Fix: 24th hour now appears correctly everywhere)
 """
 
 import streamlit as st
@@ -112,6 +112,7 @@ if not channel_names:
     st.warning(f"No data available for year {selected_year}.")
     st.stop()
 
+
 # ---------------------------------------------
 # DONUT KPI
 # ---------------------------------------------
@@ -126,7 +127,7 @@ def donut_kpi(channel_name, df_channel, color="#2ca02c"):
     safe_str = f"{safe_count:,}"
     out_str = f"{out_count:,}"
 
-    out_pct = round((out_count / total) * 100, 1) if total else 0  # NEW %
+    out_pct = round((out_count / total) * 100, 1) if total else 0
 
     fig = go.Figure()
     fig.add_trace(go.Pie(
@@ -154,7 +155,6 @@ def donut_kpi(channel_name, df_channel, color="#2ca02c"):
                 "showarrow": False,
                 "font": dict(size=14)
             },
-            # ⭐ NEW — Out-of-range % written inside white region
             {
                 "text": f"{out_pct}% Out of Range",
                 "x": 0.5, "y": 0.32,
@@ -164,7 +164,6 @@ def donut_kpi(channel_name, df_channel, color="#2ca02c"):
         ]
     )
     return fig
-
 
 
 # ---------------------------------------------
@@ -187,6 +186,7 @@ def plot_channel_summary_bars(df_summary):
     fig.update_layout(barmode="group", height=480, title="Channel Temperature Summary")
     return fig
 
+
 # ---------------------------------------------
 # SAFE RANGE LINES
 # ---------------------------------------------
@@ -194,8 +194,9 @@ def add_safe_lines(fig):
     fig.add_hline(y=DESIRED_MIN, line_dash="dash", line_color="red", line_width=2)
     fig.add_hline(y=DESIRED_MAX, line_dash="dash", line_color="red", line_width=2)
 
+
 # ---------------------------------------------
-# TODAY PANEL (FIXED)
+# TODAY PANEL
 # ---------------------------------------------
 def small_today_hourly(df_channel):
     latest_day = df_channel["BaseDate"].max()
@@ -244,26 +245,21 @@ def small_weekly(df_channel):
     fig.update_layout(title="Weekly Avg Temp", height=260)
     return fig
 
-# ---------------------------------------------
-# MONTHLY PANEL
-# ---------------------------------------------
+
 # ---------------------------------------------
 # MONTHLY PANEL (Lollipop Chart)
 # ---------------------------------------------
 def small_monthly(df_channel):
-    # Group into monthly averages
+
     df_m = df_channel.groupby(df_channel["MonthPeriod"].astype(str))["Temperature"].mean().reset_index()
     df_m.rename(columns={"MonthPeriod": "Month"}, inplace=True)
 
-    # Sort months chronologically
     df_m["Month"] = pd.to_datetime(df_m["Month"])
     df_m = df_m.sort_values("Month")
     df_m["MonthLabel"] = df_m["Month"].dt.strftime("%b %Y")
 
-    # Lollipop chart
     fig = go.Figure()
 
-    # Stem (the vertical line)
     fig.add_trace(go.Scatter(
         x=df_m["MonthLabel"],
         y=df_m["Temperature"],
@@ -273,7 +269,6 @@ def small_monthly(df_channel):
         showlegend=False
     ))
 
-    # Circle (the lollipop head)
     fig.add_trace(go.Scatter(
         x=df_m["MonthLabel"],
         y=df_m["Temperature"],
@@ -283,10 +278,8 @@ def small_monthly(df_channel):
         hovertemplate="Month: %{x}<br>Avg Temp: %{y}°C<extra></extra>"
     ))
 
-    # Safe-range horizontal lines
     add_safe_lines(fig)
 
-    # Layout improvements
     fig.update_layout(
         title="Monthly Avg Temp (Lollipop Chart)",
         height=300,
@@ -297,7 +290,6 @@ def small_monthly(df_channel):
     )
 
     return fig
-
 
 
 # -----------------------------------------------
@@ -338,15 +330,11 @@ for ch in channel_names:
 
 
 # -----------------------------------------------
-# PEAK OUT-OF-RANGE HOURS (LATEST MONTH)
+# PEAK OUT-OF-RANGE HOURS — LATEST MONTH
 # -----------------------------------------------
-# -------------------------------
-# PEAK OUT-OF-RANGE HOURS (LATEST MONTH)
-# -------------------------------
 st.markdown("---")
 st.subheader("Peak Out-of-Range Hours — Latest Month")
 
-# Determine latest month in selected year
 latest_month = None
 for ch, dfc in channels.items():
     if not dfc.empty:
@@ -359,7 +347,6 @@ if latest_month is None:
 else:
     st.write(f"Latest Month: **{latest_month}**")
 
-    # RADIO BUTTON
     selected_channel = st.radio(
         "Select Channel",
         options=list(channels.keys()),
@@ -372,15 +359,12 @@ else:
     if dfm.empty:
         st.info(f"No data for {selected_channel} in the latest month.")
     else:
-        # ALL HOURS present in the data (Option B logic)
-        dfm["HourDisplay"] = dfm["Timestamp"].dt.hour.replace(0, 24)
 
-        unique_hours = sorted(dfm["HourDisplay"].unique())   # hours that exist in data
+        dfm["HourDisplay"] = dfm["Hour_int"].replace({0: 24})
+        unique_hours = sorted(dfm["HourDisplay"].unique())
 
-        # OUT-OF-RANGE subset
         df_out = dfm[~dfm["Temperature"].between(DESIRED_MIN, DESIRED_MAX)].copy()
 
-        # Case 1: No out-of-range → still show hours but count=0
         if df_out.empty:
             st.info(f"No out-of-range values for {selected_channel} in {latest_month}.")
 
@@ -389,25 +373,20 @@ else:
                 "Count": [0] * len(unique_hours)
             })
 
-        # Case 2: Out-of-range exists → count them normally
         else:
-            df_out["HourDisplay"] = df_out["HourDisplay"].astype(int)
+            df_out["HourDisplay"] = df_out["Hour_int"].replace({0: 24})
             df_hour = df_out.groupby("HourDisplay").size().reset_index(name="Count")
-
-            # Ensure chart shows hours with 0 bars also
             df_hour = df_hour.set_index("HourDisplay").reindex(unique_hours, fill_value=0).reset_index()
 
         hours = df_hour["HourDisplay"].tolist()
         counts = df_hour["Count"].tolist()
 
-        # Chart
         fig_peak = go.Figure()
         fig_peak.add_trace(
             go.Bar(
                 x=hours,
                 y=counts,
-                marker_color="crimson",
-                name=selected_channel
+                marker_color="crimson"
             )
         )
 
@@ -426,9 +405,9 @@ else:
         st.plotly_chart(fig_peak, use_container_width=True)
 
 
-# -------------------------------
-# HOURLY DRILLDOWN (Based on selected hour)
-# -------------------------------
+# -----------------------------------------------
+# HOURLY DRILLDOWN
+# -----------------------------------------------
 if latest_month and selected_channel:
 
     st.markdown("### Drilldown: Hour-wise Readings (Latest Month)")
@@ -438,14 +417,13 @@ if latest_month and selected_channel:
 
     if not dfm.empty:
 
-        dfm["HourDisplay"] = dfm["Timestamp"].dt.hour.replace(0, 24)
+        dfm["HourDisplay"] = dfm["Hour_int"].replace({0: 24})
         unique_hours = sorted(dfm["HourDisplay"].unique())
 
         selected_hour = st.selectbox("Pick Hour to Drill Down", unique_hours)
 
         df_hr = dfm[dfm["HourDisplay"] == selected_hour].copy()
 
-        # Color red if OOR else blue
         df_hr["Color"] = df_hr["Temperature"].apply(
             lambda x: "crimson" if not (DESIRED_MIN <= x <= DESIRED_MAX) else "royalblue"
         )
@@ -466,8 +444,9 @@ if latest_month and selected_channel:
 
         st.plotly_chart(fig_drill, use_container_width=True)
 
+
 # -----------------------------------------------
-# ALERTS (LATEST AVAILABLE DATE)
+# ALERTS SECTION
 # -----------------------------------------------
 st.markdown("---")
 st.subheader("Alerts Summary (Latest Available Date)")
